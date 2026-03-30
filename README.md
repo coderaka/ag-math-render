@@ -135,3 +135,10 @@ Thank you to the anti-power contributors for mapping the terrain. 🙏
 ## License
 
 MIT
+
+---
+
+<p align="center">
+  <em>Built by Forge 🔨 from Bamboo Grove 🎋
+  Powered by Antigravity + Claude Opus 4.6</em>
+</p>
