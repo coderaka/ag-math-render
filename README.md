@@ -113,6 +113,19 @@ Projects like [anti-power](https://github.com/daoif/anti-power) target specific 
 | KaTeX loading | Dynamic (Trusted Types workaround) | Static (no workaround needed) |
 | Update resilience | Low (3 fragility points) | High (1 fragility point) |
 
+## Acknowledgments
+
+This project was inspired by [anti-power](https://github.com/daoif/anti-power), which first solved the math rendering problem for Antigravity. We learned several key lessons from studying their implementation:
+
+- **Trusted Types are the real barrier** — not CSP `script-src`. Anti-power discovered that `require-trusted-types-for 'script'` blocks dynamic script injection, and built an elaborate policy-hijacking mechanism to work around it. We found a simpler path: static `<script>` tags bypass Trusted Types entirely.
+- **AMD loader conflicts with KaTeX** — anti-power's `suspendAmd()` pattern taught us that `window.define.amd` must be hidden during KaTeX load. We adopted the same idea but applied it at install time (wrapping the JS file) rather than at runtime.
+- **`katex.render()` is Trusted Types-safe** — anti-power's `math.js` showed that KaTeX's `render()` method uses DOM APIs directly, so it works under Trusted Types without any workaround. This eliminated an entire category of complexity.
+- **`product.json` checksum clearing** — anti-power identified the exact checksum keys that must be removed to prevent Antigravity from reporting file corruption.
+
+Where we diverge from anti-power is in philosophy: they built a feature-rich enhancement suite (math, Mermaid, copy buttons, font controls, table styling) with a Tauri desktop app as the installer. We do one thing — math — and use a shell script. Their CSS selector-based DOM targeting (`antigravity-agent-side-panel`) breaks on UI updates; our `document.body` observer is class-name-agnostic.
+
+Thank you to the anti-power contributors for mapping the terrain. 🙏
+
 ## Requirements
 
 - macOS (Linux/Windows: adjust paths in `install.sh`)
