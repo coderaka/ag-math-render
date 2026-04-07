@@ -248,11 +248,16 @@
         // never set notation. E.g. 2{,}604 for thousands separator.
         result = result.replace(/\\\{([,.:;!?]?)\\\}/g, '{$1}');
 
-        // Step 6: Recover \% consumed by markdown (\% → %).
-        // In KaTeX, bare % starts a comment → kills the rest of the formula.
-        // Also recover \~ (changes non-breaking space semantics).
-        result = result.replace(/(?<!\\)%/g, '\\%');
-        result = result.replace(/(?<!\\)~/g, '\\~');
+        // Step 6: Recover punctuation escapes consumed by markdown.
+        // Markdown treats \X as escape when X is ASCII punctuation,
+        // stripping the backslash. We restore the ones critical for KaTeX:
+        result = result.replace(/(?<!\\)%/g, '\\%');   // % → comment in KaTeX
+        result = result.replace(/(?<!\\)#/g, '\\#');   // # → macro param in KaTeX
+        result = result.replace(/(?<!\\)~/g, '\\~');   // ~ → non-breaking space
+
+        // \, → , (thin space becomes comma). Detect: comma preceded by
+        // whitespace or }, ) — normal commas attach to preceding token.
+        result = result.replace(/(\s|[})])  ?,/g, '$1\\,');
 
         return result;
     }
