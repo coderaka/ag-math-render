@@ -126,28 +126,56 @@
         );
 
         // Step 2: Classify remaining { } as set-notation or grouping.
-        const ARG_COMMANDS = new Set([
-            'mathcal','mathbb','mathbf','mathrm','mathsf','mathtt','mathit',
-            'mathfrak','mathscr','mathnormal',
-            'text','textbf','textrm','textsf','texttt','textit','textnormal',
-            'boldsymbol','pmb','bm',
-            'hat','bar','tilde','vec','dot','ddot','acute','grave','breve',
-            'check','widehat','widetilde',
-            'frac','dfrac','tfrac','cfrac',
-            'binom','dbinom','tbinom',
-            'sqrt','root',
-            'overline','underline','overbrace','underbrace',
-            'overleftarrow','overrightarrow','overleftrightarrow',
-            'underleftarrow','underrightarrow','underleftrightarrow',
-            'boxed','cancel','bcancel','xcancel','sout',
-            'phantom','hphantom','vphantom','smash',
-            'color','textcolor','colorbox','fcolorbox',
-            'underset','overset','stackrel',
-            'begin','end',
-            'operatorname',
-            'pmod','bmod','pod',
-            'xrightarrow','xleftarrow',
-            'href','url','tag','rlap','llap','clap',
+        // STANDALONE commands (operators, Greek letters, symbols) do NOT
+        // take {} args, so { after them is set notation.
+        // All other commands (including unknown/custom ones) default to
+        // grouping — this is the safer assumption.
+        const STANDALONE = new Set([
+            // Greek lowercase
+            'alpha','beta','gamma','delta','epsilon','varepsilon','zeta','eta',
+            'theta','vartheta','iota','kappa','lambda','mu','nu','xi',
+            'pi','varpi','rho','varrho','sigma','varsigma','tau','upsilon',
+            'phi','varphi','chi','psi','omega',
+            // Greek uppercase
+            'Gamma','Delta','Theta','Lambda','Xi','Pi','Sigma','Upsilon',
+            'Phi','Psi','Omega',
+            // Binary operators
+            'cap','cup','sqcap','sqcup','wedge','vee','cdot','times',
+            'otimes','oplus','circ','bullet','star','dagger','ddagger',
+            'setminus','wr','amalg','div','pm','mp',
+            // Relations
+            'leq','geq','le','ge','lt','gt','neq','ne',
+            'equiv','sim','simeq','approx','cong','propto',
+            'subset','supset','subseteq','supseteq','sqsubseteq','sqsupseteq',
+            'in','notin','ni','owns','vdash','dashv','models',
+            'prec','succ','preceq','succeq','parallel','perp','mid',
+            // Arrows
+            'to','rightarrow','leftarrow','leftrightarrow','Rightarrow',
+            'Leftarrow','Leftrightarrow','mapsto','hookrightarrow',
+            'hookleftarrow','uparrow','downarrow','nearrow','searrow',
+            'longrightarrow','longleftarrow','implies','iff',
+            // Big operators
+            'sum','prod','coprod','int','iint','iiint','oint',
+            'bigcup','bigcap','bigsqcup','bigvee','bigwedge',
+            'bigoplus','bigotimes','bigodot','biguplus',
+            // Standard functions (no braces)
+            'sin','cos','tan','cot','sec','csc',
+            'arcsin','arccos','arctan','sinh','cosh','tanh',
+            'exp','log','ln','lg','lim','limsup','liminf',
+            'sup','inf','max','min','arg','det','dim','deg',
+            'gcd','hom','ker','Pr',
+            // Spacing
+            'quad','qquad','enspace','thinspace',
+            // Common symbols
+            'infty','emptyset','varnothing','partial','nabla','ell',
+            'hbar','imath','jmath','Re','Im','wp','aleph',
+            'forall','exists','nexists','neg','lnot','top','bot',
+            'angle','triangle','square','diamond','clubsuit','diamondsuit',
+            'heartsuit','spadesuit','flat','sharp','natural',
+            // Dots
+            'dots','ldots','cdots','vdots','ddots',
+            // Misc standalone
+            'colon','ldotp','cdotp',
         ]);
 
         // Multi-arg commands: { after closing } of first arg is still grouping
@@ -199,8 +227,9 @@
                     if (/[_^{]\s*$/.test(before)) {
                         isGrouping = true;
                     } else {
+                        // Flip: standalone commands → set notation; all others → grouping
                         const cmdMatch = before.match(/\\([a-zA-Z]+)\s*$/);
-                        isGrouping = !!(cmdMatch && ARG_COMMANDS.has(cmdMatch[1]));
+                        isGrouping = cmdMatch ? !STANDALONE.has(cmdMatch[1]) : false;
                     }
                     stack.push({ index: i, isSet: !isGrouping, remaining: 0 });
                 }
@@ -382,6 +411,10 @@
                         displayMode: tok.display,
                         throwOnError: false,
                         trust: true,
+                        macros: {
+                            '\\defeq': '\\triangleq',
+                            '\\zref': '\\text{[ref]}',
+                        },
                     });
                 } catch {
                     span.textContent = `${tok.rawLeft}${tok.data}${tok.rawRight}`;
