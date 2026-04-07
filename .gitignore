@@ -1,3 +1,4 @@
 # KaTeX fonts and build artifacts
 payload/katex/katex.min.original.js
 *.DS_Store
+.vault

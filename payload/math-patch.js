@@ -116,8 +116,158 @@
         return tokens;
     }
 
+    // ── Brace Recovery ────────────────────────────────────────────
+    function recoverBraces(latex) {
+        // Step 1: Delimiter-sizing commands (\left, \right, etc.)
+        // \left{ → \left\{, \right} → \right\}
+        latex = latex.replace(
+            /(\\(?:left|right|middle|big[lr]?|Big[lr]?|bigg[lr]?|Bigg[lr]?))\s*([{}])/g,
+            (_, cmd, brace) => cmd + '\\' + brace
+        );
+
+        // Step 2: Classify remaining { } as set-notation or grouping.
+        const ARG_COMMANDS = new Set([
+            'mathcal','mathbb','mathbf','mathrm','mathsf','mathtt','mathit',
+            'mathfrak','mathscr','mathnormal',
+            'text','textbf','textrm','textsf','texttt','textit','textnormal',
+            'boldsymbol','pmb','bm',
+            'hat','bar','tilde','vec','dot','ddot','acute','grave','breve',
+            'check','widehat','widetilde',
+            'frac','dfrac','tfrac','cfrac',
+            'binom','dbinom','tbinom',
+            'sqrt','root',
+            'overline','underline','overbrace','underbrace',
+            'overleftarrow','overrightarrow','overleftrightarrow',
+            'underleftarrow','underrightarrow','underleftrightarrow',
+            'boxed','cancel','bcancel','xcancel','sout',
+            'phantom','hphantom','vphantom','smash',
+            'color','textcolor','colorbox','fcolorbox',
+            'underset','overset','stackrel',
+            'begin','end',
+            'operatorname',
+            'pmod','bmod','pod',
+            'xrightarrow','xleftarrow',
+            'href','url','tag','rlap','llap','clap',
+        ]);
+
+        // Multi-arg commands: { after closing } of first arg is still grouping
+        const MULTI_ARG = new Map([
+            ['frac',2],['dfrac',2],['tfrac',2],['cfrac',2],
+            ['binom',2],['dbinom',2],['tbinom',2],
+            ['underset',2],['overset',2],['stackrel',2],
+            ['textcolor',2],['colorbox',2],['fcolorbox',3],
+            ['href',2],
+        ]);
+
+        const stack = [];
+        const setIndices = new Set();
+        let pendingCmd = null;
+        let expectGrouping = false;
+        let remainingArgs = 0;
+
+        let i = 0;
+        while (i < latex.length) {
+            if (latex[i] === '\\') {
+                i++;
+                if (i < latex.length && /[a-zA-Z]/.test(latex[i])) {
+                    const cmdStart = i;
+                    while (i < latex.length && /[a-zA-Z]/.test(latex[i])) i++;
+                    const cmdName = latex.substring(cmdStart, i);
+                    if (MULTI_ARG.has(cmdName)) {
+                        pendingCmd = cmdName;
+                    }
+                } else if (i < latex.length) {
+                    i++;
+                }
+                continue;
+            }
+            if (latex[i] === '{') {
+                let isGrouping;
+                if (expectGrouping && remainingArgs > 0) {
+                    isGrouping = true;
+                    const rem = remainingArgs - 1;
+                    stack.push({ index: i, isSet: false, remaining: rem });
+                    expectGrouping = false;
+                    remainingArgs = 0;
+                } else if (pendingCmd) {
+                    isGrouping = true;
+                    const total = MULTI_ARG.get(pendingCmd);
+                    stack.push({ index: i, isSet: false, remaining: total - 1 });
+                    pendingCmd = null;
+                } else {
+                    const before = latex.substring(0, i);
+                    if (/[_^{]\s*$/.test(before)) {
+                        isGrouping = true;
+                    } else {
+                        const cmdMatch = before.match(/\\([a-zA-Z]+)\s*$/);
+                        isGrouping = !!(cmdMatch && ARG_COMMANDS.has(cmdMatch[1]));
+                    }
+                    stack.push({ index: i, isSet: !isGrouping, remaining: 0 });
+                }
+                if (!isGrouping) setIndices.add(i);
+                i++;
+            } else if (latex[i] === '}') {
+                if (stack.length > 0) {
+                    const entry = stack.pop();
+                    if (entry.isSet) setIndices.add(i);
+                    if (!entry.isSet && entry.remaining > 0) {
+                        expectGrouping = true;
+                        remainingArgs = entry.remaining;
+                    }
+                }
+                i++;
+            } else {
+                if (pendingCmd && !/\s/.test(latex[i])) {
+                    pendingCmd = null;
+                }
+                if (expectGrouping && !/\s/.test(latex[i])) {
+                    expectGrouping = false;
+                    remainingArgs = 0;
+                }
+                i++;
+            }
+        }
+
+        // Step 3: Replace set-notation braces with \{ / \}
+        let result = '';
+        for (let j = 0; j < latex.length; j++) {
+            if (setIndices.has(j)) {
+                result += (latex[j] === '{' ? '\\{' : '\\}');
+            } else {
+                result += latex[j];
+            }
+        }
+
+        // Step 4: Recover \\ consumed by markdown (\\→\).
+        // A lone \ not followed by a letter is likely from \\\\ (newline).
+        // Match \ followed by space, newline, &, or end-of-string.
+        result = result.replace(/\\(?=\s|&|$)/g, '\\\\');
+
+        return result;
+    }
+
     // ── Underscore Restoration ─────────────────────────────────────
     // Markdown renders _x_ as <em>x</em> inside $...$, breaking LaTeX.
+    // extractWithMarkers: recursively extract text from a node,
+    // preserving underscore markers for nested <em>/<strong>.
+    function extractWithMarkers(node) {
+        let r = '';
+        for (const ch of node.childNodes) {
+            if (ch.nodeType === Node.TEXT_NODE) {
+                r += ch.textContent;
+            } else if (ch.nodeType === Node.ELEMENT_NODE) {
+                const tag = ch.tagName.toLowerCase();
+                if (tag === 'em') {
+                    r += '_' + extractWithMarkers(ch) + '_';
+                } else if (tag === 'strong') {
+                    r += '__' + extractWithMarkers(ch) + '__';
+                } else {
+                    r += ch.textContent || '';
+                }
+            }
+        }
+        return r;
+    }
 
     function restoreUnderscores(el) {
         if (!el || shouldSkipElement(el)) return;
@@ -150,8 +300,14 @@
 
             seg.forEach(u => {
                 if (u.type !== 'format') return;
-                const inside = ranges.some(r => u.start >= r.start && u.end <= r.end);
-                if (!inside) return;
+                // Detect if em starts or ends inside any math region.
+                // This handles cross-boundary emphasis where markdown
+                // pairs underscores from two different $...$ blocks.
+                const touchesMath = ranges.some(r =>
+                    (u.start >= r.start && u.start < r.end) ||
+                    (u.end > r.start && u.end <= r.end)
+                );
+                if (!touchesMath) return;
                 u.node.replaceWith(document.createTextNode(`${u.marker}${u.text}${u.marker}`));
                 restored = true;
             });
@@ -168,7 +324,7 @@
                 if (shouldSkipElement(child)) { flush(); continue; }
                 const tag = child.tagName.toLowerCase();
                 if (tag === 'em' || tag === 'strong') {
-                    const t = child.textContent || '';
+                    const t = extractWithMarkers(child);
                     if (!t) { flush(); continue; }
                     seg.push({ type: 'format', node: child, text: t, marker: tag === 'strong' ? '__' : '_' });
                 } else {
@@ -221,7 +377,8 @@
                 const span = document.createElement('span');
                 span.className = tok.display ? 'math-rendered-display' : 'math-rendered-inline';
                 try {
-                    window.katex.render(tok.data, span, {
+                    const mathContent = recoverBraces(tok.data);
+                    window.katex.render(mathContent, span, {
                         displayMode: tok.display,
                         throwOnError: false,
                         trust: true,
@@ -334,7 +491,7 @@
         }
         injectStyles();
         startObserver();
-        console.log('[ag-math] Math rendering patch loaded (v1.1.0)');
+        console.log('[ag-math] Math rendering patch loaded (v1.2.0)');
     }
 
     if (document.readyState === 'loading') {
