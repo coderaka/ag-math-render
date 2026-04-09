@@ -255,9 +255,11 @@
         result = result.replace(/(?<!\\)#/g, '\\#');   // # → macro param in KaTeX
         result = result.replace(/(?<!\\)~/g, '\\~');   // ~ → non-breaking space
 
-        // \, → , (thin space becomes comma). Detect: comma preceded by
-        // whitespace or }, ) — normal commas attach to preceding token.
-        result = result.replace(/(\s|[})])  ?,/g, '$1\\,');
+        // \, → , and \; → ; (spacing becomes punctuation).
+        // Detect: comma/semicolon preceded by whitespace or }, ), |
+        // Normal commas/semicolons attach to preceding token (x, y).
+        result = result.replace(/([\s})|])  ?,/g, '$1\\,');
+        result = result.replace(/([\s})|])  ?;/g, '$1\\;');
 
         return result;
     }
