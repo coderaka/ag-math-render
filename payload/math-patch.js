@@ -378,30 +378,6 @@
 
     // ── Rendering ──────────────────────────────────────────────────
 
-    // Collect text from a node, flattening inline elements (a, em, etc.)
-    // that markdown may have injected inside math blocks.
-    // For <a> elements, reconstruct [text](href) to recover the [] and ()
-    // that markdown consumed when parsing [text](url) as a link.
-    // Recursive: handles <a> nested inside <span>, <em>, etc.
-    function collectInlineText(el) {
-        let text = '';
-        for (const child of el.childNodes) {
-            if (child.nodeType === Node.TEXT_NODE) {
-                text += child.textContent;
-            } else if (child.nodeType === Node.ELEMENT_NODE) {
-                if (shouldSkipElement(child)) continue;
-                const tag = child.tagName.toLowerCase();
-                if (tag === 'a' && child.getAttribute('href')) {
-                    // Reconstruct [text](href) to recover [] and ()
-                    text += '[' + (child.textContent || '') + '](' + child.getAttribute('href') + ')';
-                } else {
-                    // Recurse into other inline elements (span, em, strong, etc.)
-                    text += collectInlineText(child);
-                }
-            }
-        }
-        return text;
-    }
 
     // Shared helper: tokenize → render → build fragment
     function renderTokensToFrag(tokens) {
@@ -428,49 +404,54 @@
         return frag;
     }
 
+    // ── Link Unwrapping ─────────────────────────────────────────
+    // Markdown parses [text](x) inside $$...$$ as a link, creating
+    // <a href="x">text</a> which consumes [], (). We detect these
+    // false-positive links and replace them with text nodes to
+    // restore the original characters.
+    function isFalsePositiveLink(a) {
+        const href = a.getAttribute('href') || '';
+        // Real URLs have schemes, paths, dots, or anchors.
+        // Math "hrefs" are short variable names: x, y, f, x_0, etc.
+        if (/^(https?|mailto|ftp):/.test(href)) return false;
+        if (href.startsWith('/') || href.startsWith('#')) return false;
+        if (/\.\w{2,}/.test(href)) return false;  // has file extension or domain
+        // Short, no slashes, no dots → likely a math variable
+        return href.length <= 30;
+    }
+
+    function unwrapMathLinks(el) {
+        // Only unwrap links inside elements that contain $$ or $ math
+        const text = el.textContent || '';
+        if (!text.includes('$')) return;
+
+        const links = [...el.querySelectorAll('a[href]')];
+        let unwrapped = false;
+        for (const link of links) {
+            if (!isFalsePositiveLink(link)) continue;
+            // Check if this link is near math delimiters
+            const parent = link.parentElement;
+            if (!parent || !(parent.textContent || '').includes('$')) continue;
+            // Replace <a> with text node: reconstruct [text](href)
+            const replacement = document.createTextNode(
+                '[' + link.textContent + '](' + link.getAttribute('href') + ')'
+            );
+            link.replaceWith(replacement);
+            unwrapped = true;
+        }
+        if (unwrapped) el.normalize();  // merge adjacent text nodes
+    }
+
     function renderElement(el) {
         restoreUnderscores(el);
+        unwrapMathLinks(el);  // Fix false-positive links BEFORE rendering
 
-        // ── Cross-node pass (FIRST) ──────────────────────────────
-        // For paragraph-like containers where math may span across
-        // inline elements (<a> from markdown link parsing, etc.).
-        // Must run BEFORE per-text-node pass to avoid destroying
-        // already-rendered inline math.
-        const processed = new Set();
-        const containerSel = 'p, li, td, th, dd, dt, summary, blockquote > div';
-        // querySelectorAll only finds descendants, not el itself.
-        // If no descendant containers found, el itself is the leaf container
-        // (e.g. a <p>). DO NOT add el when it's a large wrapper — that
-        // would merge ALL message content and destroy the DOM.
-        const containers = [...el.querySelectorAll(containerSel)];
-        if (containers.length === 0) containers.push(el);
-
-        for (const container of containers) {
-            if (!MATH_HINT.test(container.textContent || '')) continue;
-            const merged = collectInlineText(container);
-            if (!merged.includes('$$') && !merged.includes('\\[')) continue;
-
-            const tokens = tokenize(merged);
-            if (tokens.length === 1 && tokens[0].type === 'text') continue;
-            if (!tokens.some(t => t.type === 'math')) continue;
-
-            // Replace container's children with rendered content
-            const frag = renderTokensToFrag(tokens);
-            container.textContent = '';
-            container.appendChild(frag);
-            processed.add(container);
-        }
-
-        // ── Per-text-node pass (SECOND) ───────────────────────────
-        // Handles simple inline math in text nodes not already
-        // processed by the cross-node pass.
+        // ── Per-text-node pass ─────────────────────────────────────
         const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
         const textNodes = [];
         let n;
         while ((n = walker.nextNode())) {
             if (shouldSkipText(n)) continue;
-            // Skip nodes inside containers already processed above
-            if (n.parentElement && processed.has(n.parentElement)) continue;
             if (!n.textContent || !MATH_HINT.test(n.textContent)) continue;
             textNodes.push(n);
         }
