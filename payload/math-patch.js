@@ -435,7 +435,11 @@
         // Must run BEFORE per-text-node pass to avoid destroying
         // already-rendered inline math.
         const processed = new Set();
-        const containers = el.querySelectorAll('p, li, td, th, dd, dt, summary, blockquote > div');
+        const containerSel = 'p, li, td, th, dd, dt, summary, blockquote > div';
+        // Include el itself if it matches (querySelectorAll only finds descendants)
+        const containers = [...el.querySelectorAll(containerSel)];
+        if (el.matches && el.matches(containerSel)) containers.unshift(el);
+
         for (const container of containers) {
             if (!MATH_HINT.test(container.textContent || '')) continue;
             const merged = collectInlineText(container);
