@@ -437,6 +437,7 @@
             // Only unwrap if near math delimiters
             const parent = mention.parentElement;
             if (!parent || !(parent.textContent || '').includes('$')) continue;
+
             // Reconstruct [text] - the brackets were consumed by mention parser
             const replacement = document.createTextNode(
                 '[' + mention.textContent + ']'
