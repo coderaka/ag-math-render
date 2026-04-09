@@ -382,6 +382,7 @@
     // that markdown may have injected inside math blocks.
     // For <a> elements, reconstruct [text](href) to recover the [] and ()
     // that markdown consumed when parsing [text](url) as a link.
+    // Recursive: handles <a> nested inside <span>, <em>, etc.
     function collectInlineText(el) {
         let text = '';
         for (const child of el.childNodes) {
@@ -394,7 +395,8 @@
                     // Reconstruct [text](href) to recover [] and ()
                     text += '[' + (child.textContent || '') + '](' + child.getAttribute('href') + ')';
                 } else {
-                    text += child.textContent || '';
+                    // Recurse into other inline elements (span, em, strong, etc.)
+                    text += collectInlineText(child);
                 }
             }
         }
@@ -436,9 +438,9 @@
         // already-rendered inline math.
         const processed = new Set();
         const containerSel = 'p, li, td, th, dd, dt, summary, blockquote > div';
-        // Include el itself if it matches (querySelectorAll only finds descendants)
-        const containers = [...el.querySelectorAll(containerSel)];
-        if (el.matches && el.matches(containerSel)) containers.unshift(el);
+        // Always include el itself — it may be the <p> containing the math.
+        // querySelectorAll only finds descendants, not el itself.
+        const containers = [el, ...el.querySelectorAll(containerSel)];
 
         for (const container of containers) {
             if (!MATH_HINT.test(container.textContent || '')) continue;
