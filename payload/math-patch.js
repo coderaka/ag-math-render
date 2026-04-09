@@ -429,7 +429,6 @@
         let unwrapped = false;
         for (const link of links) {
             if (!isFalsePositiveLink(link)) continue;
-            // Check if this link is near math delimiters
             const parent = link.parentElement;
             if (!parent || !(parent.textContent || '').includes('$')) continue;
             // Replace <a> with text node: reconstruct [text](href)
@@ -439,7 +438,7 @@
             link.replaceWith(replacement);
             unwrapped = true;
         }
-        if (unwrapped) el.normalize();  // merge adjacent text nodes
+        if (unwrapped) el.normalize();
     }
 
     function renderElement(el) {
