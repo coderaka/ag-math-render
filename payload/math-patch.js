@@ -255,11 +255,14 @@
         result = result.replace(/(?<!\\)#/g, '\\#');   // # → macro param in KaTeX
         result = result.replace(/(?<!\\)~/g, '\\~');   // ~ → non-breaking space
 
-        // \, → , and \; → ; (spacing becomes punctuation).
-        // Detect: comma/semicolon preceded by whitespace or }, ), |
-        // Normal commas/semicolons attach to preceding token (x, y).
-        result = result.replace(/([\s})|])  ?,/g, '$1\\,');
-        result = result.replace(/([\s})|])  ?;/g, '$1\\;');
+        // \; → ; (medium space becomes semicolon).
+        // Bare ; is extremely rare in math mode — always recover.
+        result = result.replace(/(?<!\\);/g, '\\;');
+
+        // \, → , (thin space becomes comma). More careful: commas ARE
+        // common in math (x, y). Only recover when preceded by whitespace
+        // or closing delimiters — normal commas attach to preceding token.
+        result = result.replace(/([\s})|]) ?,/g, '$1\\,');
 
         return result;
     }
