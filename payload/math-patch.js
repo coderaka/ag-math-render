@@ -378,9 +378,31 @@
 
     // ── Rendering ──────────────────────────────────────────────────
 
+    // Collect text from a node, flattening inline elements (a, em, etc.)
+    // that markdown may have injected inside math blocks.
+    function collectInlineText(el) {
+        let text = '';
+        for (const child of el.childNodes) {
+            if (child.nodeType === Node.TEXT_NODE) {
+                text += child.textContent;
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                if (shouldSkipElement(child)) continue;
+                // Inline elements: flatten their text content
+                text += child.textContent || '';
+            }
+        }
+        return text;
+    }
+
     function renderElement(el) {
         restoreUnderscores(el);
 
+        // Strategy: process each "paragraph-like" container.
+        // For block elements with inline children (p, li, div, td, etc.),
+        // merge ALL child text and tokenize as one string to catch
+        // $$...$$ that spans across <a>, <em>, etc.
+
+        // First pass: per-text-node (handles simple cases efficiently)
         const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
         const textNodes = [];
         let n;
@@ -415,6 +437,48 @@
                 frag.appendChild(span);
             }
             textNode.replaceWith(frag);
+        }
+
+        // Second pass: for paragraph-like containers where math may span
+        // across inline elements (e.g., <a> from markdown [text](url) parsing).
+        // Collect all inline text, tokenize, and if math is found that
+        // wasn't caught in the first pass, re-render the whole container.
+        const containers = el.querySelectorAll('p, li, td, th, dd, dt, summary, blockquote > div');
+        for (const container of containers) {
+            // Skip if already fully rendered
+            if (!MATH_HINT.test(container.textContent || '')) continue;
+            // Check if there's un-rendered $$ remaining
+            const merged = collectInlineText(container);
+            if (!merged.includes('$$') && !merged.includes('\\[')) continue;
+
+            const tokens = tokenize(merged);
+            if (tokens.length === 1 && tokens[0].type === 'text') continue;
+            // Only proceed if we found math tokens (display math that was missed)
+            if (!tokens.some(t => t.type === 'math')) continue;
+
+            // Replace container's children with rendered content
+            const frag = document.createDocumentFragment();
+            for (const tok of tokens) {
+                if (tok.type === 'text') {
+                    if (tok.data) frag.appendChild(document.createTextNode(tok.data));
+                    continue;
+                }
+                const span = document.createElement('span');
+                span.className = tok.display ? 'math-rendered-display' : 'math-rendered-inline';
+                try {
+                    const mathContent = recoverBraces(tok.data);
+                    window.katex.render(mathContent, span, {
+                        displayMode: tok.display,
+                        throwOnError: false,
+                        trust: true,
+                    });
+                } catch {
+                    span.textContent = `${tok.rawLeft}${tok.data}${tok.rawRight}`;
+                }
+                frag.appendChild(span);
+            }
+            container.textContent = '';
+            container.appendChild(frag);
         }
     }
 
