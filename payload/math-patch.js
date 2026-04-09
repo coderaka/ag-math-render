@@ -438,9 +438,12 @@
         // already-rendered inline math.
         const processed = new Set();
         const containerSel = 'p, li, td, th, dd, dt, summary, blockquote > div';
-        // Always include el itself — it may be the <p> containing the math.
         // querySelectorAll only finds descendants, not el itself.
-        const containers = [el, ...el.querySelectorAll(containerSel)];
+        // If no descendant containers found, el itself is the leaf container
+        // (e.g. a <p>). DO NOT add el when it's a large wrapper — that
+        // would merge ALL message content and destroy the DOM.
+        const containers = [...el.querySelectorAll(containerSel)];
+        if (containers.length === 0) containers.push(el);
 
         for (const container of containers) {
             if (!MATH_HINT.test(container.textContent || '')) continue;
