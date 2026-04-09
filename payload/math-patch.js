@@ -264,6 +264,11 @@
         // or closing delimiters — normal commas attach to preceding token.
         result = result.replace(/([\s})|]) ?,/g, '$1\\,');
 
+        // \! → ! (negative thin space becomes exclamation).
+        // Heuristic: ! before \command or ( is spacing (f\!\left(...).
+        // ! after letter/digit (n!) is factorial — don't touch.
+        result = result.replace(/!(?=\\[a-zA-Z]|\()/g, '\\!');
+
         return result;
     }
 
