@@ -409,6 +409,9 @@
     // <a href="x">text</a> which consumes [], (). We detect these
     // false-positive links and replace them with text nodes to
     // restore the original characters.
+    //
+    // ALSO: Antigravity parses [text](scope) as "context-scope-mention"
+    // spans (<span class="context-scope-mention">), consuming [] too.
     function isFalsePositiveLink(a) {
         const href = a.getAttribute('href') || '';
         // Real URLs have schemes, paths, dots, or anchors.
@@ -420,30 +423,47 @@
         return href.length <= 30;
     }
 
-    function unwrapMathLinks(el) {
-        // Only unwrap links inside elements that contain $$ or $ math
+    function unwrapMathMentions(el) {
+        // Only process elements that contain math delimiters
         const text = el.textContent || '';
         if (!text.includes('$')) return;
 
+        let modified = false;
+
+        // 1. Unwrap context-scope-mention spans (Antigravity mention parser)
+        //    These consume [] from [text](scope) patterns inside math.
+        const mentions = [...el.querySelectorAll('span.context-scope-mention')];
+        for (const mention of mentions) {
+            // Only unwrap if near math delimiters
+            const parent = mention.parentElement;
+            if (!parent || !(parent.textContent || '').includes('$')) continue;
+            // Reconstruct [text] - the brackets were consumed by mention parser
+            const replacement = document.createTextNode(
+                '[' + mention.textContent + ']'
+            );
+            mention.replaceWith(replacement);
+            modified = true;
+        }
+
+        // 2. Unwrap false-positive <a> links (markdown link parser)
         const links = [...el.querySelectorAll('a[href]')];
-        let unwrapped = false;
         for (const link of links) {
             if (!isFalsePositiveLink(link)) continue;
             const parent = link.parentElement;
             if (!parent || !(parent.textContent || '').includes('$')) continue;
-            // Replace <a> with text node: reconstruct [text](href)
             const replacement = document.createTextNode(
                 '[' + link.textContent + '](' + link.getAttribute('href') + ')'
             );
             link.replaceWith(replacement);
-            unwrapped = true;
+            modified = true;
         }
-        if (unwrapped) el.normalize();
+
+        if (modified) el.normalize();  // merge adjacent text nodes
     }
 
     function renderElement(el) {
         restoreUnderscores(el);
-        unwrapMathLinks(el);  // Fix false-positive links BEFORE rendering
+        unwrapMathMentions(el);  // Fix consumed [] BEFORE rendering
 
         // ── Per-text-node pass ─────────────────────────────────────
         const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
