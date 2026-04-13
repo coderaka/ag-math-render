@@ -1,6 +1,6 @@
 # ag-math-render
 
-Render LaTeX math formulas in [Antigravity AI IDE](https://antigravity.dev) chat — with just **2 files** and zero bloat.
+Render LaTeX math formulas in [Antigravity AI IDE](https://antigravity.google/) chat — with just **2 files** and zero bloat.
 
 <p align="center">
   <strong>Before</strong>: <code>$x^2 + y^2 = z^2$</code> shown as plain text<br/>
