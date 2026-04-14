@@ -24,7 +24,8 @@
     const SNAPSHOT_PROP = Symbol('mathTextSnapshot');
 
     // Quick test: does text likely contain math?
-    const MATH_HINT = /\$\$|\\\(|\\\[|\$(?!\s)([^$\n]+?)\$/;
+    // Basic currency guard: skip $<digit> (detailed check in findOpen)
+    const MATH_HINT = /\$\$|\\\(|\\\[|\$(?!\d)(?!\s)([^$\n]+?)\$/;
 
     // Delimiters in priority order (longer match first)
     const DELIMITERS = [
@@ -48,14 +49,27 @@
         return count % 2 === 1;
     }
 
+    // Currency detection: $ followed by optional sign, then a "money amount":
+    //   - three or more digits (e.g. $100, $-358)
+    //   - digits with commas/periods as thousand/decimal separators ($3,780, $1,234.56)
+    // Single or two digit numbers ($1, $-1, $2n) pass through so $-1$ or $2\pi$ still work as math.
+    const CURRENCY_AMOUNT = /^[+-\u2013\u2014]?\d[\d,]*[,.]?\d{2,}/;
+
     function findOpen(text, pos) {
         let best = null;
         for (const d of DELIMITERS) {
             const idx = text.indexOf(d.left, pos);
             if (idx === -1) continue;
             if (isEscaped(text, idx)) continue;
-            // For single $: next char must not be whitespace
-            if (d.left === '$' && text[idx + 1] && /\s/.test(text[idx + 1])) continue;
+            if (d.left === '$') {
+                // For single $: next char must not be whitespace
+                if (text[idx + 1] && /\s/.test(text[idx + 1])) continue;
+                // Skip currency: $ followed by a money-like amount (≥3 digits or comma-separated)
+                const after = text.slice(idx + 1, idx + 21);
+                if (CURRENCY_AMOUNT.test(after)) continue;
+                // Skip if preceded by an ASCII digit (e.g. end of "100$")
+                if (idx > 0 && /\d/.test(text[idx - 1])) continue;
+            }
             if (!best || idx < best.index ||
                 (idx === best.index && d.left.length > best.delim.left.length)) {
                 best = { index: idx, delim: d };
