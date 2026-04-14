@@ -58,18 +58,26 @@
     function findOpen(text, pos) {
         let best = null;
         for (const d of DELIMITERS) {
-            const idx = text.indexOf(d.left, pos);
-            if (idx === -1) continue;
-            if (isEscaped(text, idx)) continue;
-            if (d.left === '$') {
-                // For single $: next char must not be whitespace
-                if (text[idx + 1] && /\s/.test(text[idx + 1])) continue;
-                // Skip currency: $ followed by a money-like amount (≥3 digits or comma-separated)
-                const after = text.slice(idx + 1, idx + 21);
-                if (CURRENCY_AMOUNT.test(after)) continue;
-                // Skip if preceded by an ASCII digit (e.g. end of "100$")
-                if (idx > 0 && /\d/.test(text[idx - 1])) continue;
+            let idx = text.indexOf(d.left, pos);
+            // For single $, loop past rejected (currency/escaped) positions
+            while (idx !== -1) {
+                if (isEscaped(text, idx)) { idx = text.indexOf(d.left, idx + 1); continue; }
+                if (d.left === '$') {
+                    let skip = false;
+                    // Next char must not be whitespace
+                    if (text[idx + 1] && /\s/.test(text[idx + 1])) skip = true;
+                    // Skip currency: $ followed by a money-like amount (≥3 digits or comma-separated)
+                    if (!skip) {
+                        const after = text.slice(idx + 1, idx + 21);
+                        if (CURRENCY_AMOUNT.test(after)) skip = true;
+                    }
+                    // Skip if preceded by an ASCII digit (e.g. end of "100$")
+                    if (!skip && idx > 0 && /\d/.test(text[idx - 1])) skip = true;
+                    if (skip) { idx = text.indexOf(d.left, idx + 1); continue; }
+                }
+                break;
             }
+            if (idx === -1) continue;
             if (!best || idx < best.index ||
                 (idx === best.index && d.left.length > best.delim.left.length)) {
                 best = { index: idx, delim: d };
