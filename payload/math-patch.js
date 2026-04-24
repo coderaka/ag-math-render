@@ -367,7 +367,16 @@
 
                 const marker = isAsterisk ? (u.marker === '__' ? '**' : '*') : u.marker;
 
-                u.node.replaceWith(document.createTextNode(`${marker}${u.text}${marker}`));
+                // Unwrap in place: preserve the DOM structure of the children
+                // instead of replacing the entire node with flattened text.
+                const frag = document.createDocumentFragment();
+                frag.appendChild(document.createTextNode(marker));
+                while (u.node.firstChild) {
+                    frag.appendChild(u.node.firstChild);
+                }
+                frag.appendChild(document.createTextNode(marker));
+                u.node.replaceWith(frag);
+
                 restored = true;
             });
             seg = [];
