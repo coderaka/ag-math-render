@@ -356,7 +356,18 @@
                     (u.end > r.start && u.end <= r.end)
                 );
                 if (!touchesMath) return;
-                u.node.replaceWith(document.createTextNode(`${u.marker}${u.text}${u.marker}`));
+
+                // Heuristic: if the marker is preceded by ^ or ^{, it's highly likely
+                // an asterisk (*) rather than an underscore (_), since ^_ is invalid.
+                // This fixes the bug where $f^*$ and $V^*$ are restored as $f_$ and $V_$.
+                let isAsterisk = false;
+                const beforeOpen = merged.substring(0, u.start);
+                if (beforeOpen.endsWith('^') || beforeOpen.endsWith('^{')) isAsterisk = true;
+                if (u.text.endsWith('^') || u.text.endsWith('^{')) isAsterisk = true;
+
+                const marker = isAsterisk ? (u.marker === '__' ? '**' : '*') : u.marker;
+
+                u.node.replaceWith(document.createTextNode(`${marker}${u.text}${marker}`));
                 restored = true;
             });
             seg = [];
