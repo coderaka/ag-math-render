@@ -362,8 +362,9 @@
                 // This fixes the bug where $f^*$ and $V^*$ are restored as $f_$ and $V_$.
                 let isAsterisk = false;
                 const beforeOpen = merged.substring(0, u.start);
-                if (beforeOpen.endsWith('^') || beforeOpen.endsWith('^{')) isAsterisk = true;
-                if (u.text.endsWith('^') || u.text.endsWith('^{')) isAsterisk = true;
+                // If preceded by ^ or {, it's highly likely an asterisk
+                if (beforeOpen.endsWith('^') || beforeOpen.endsWith('{')) isAsterisk = true;
+                if (u.text.endsWith('^') || u.text.endsWith('{')) isAsterisk = true;
 
                 const marker = isAsterisk ? (u.marker === '__' ? '**' : '*') : u.marker;
 
