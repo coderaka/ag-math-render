@@ -294,6 +294,55 @@
         return result;
     }
 
+    // ── Literal Bold Fixup ───────────────────────────────────────
+    // CommonMark's left-flanking delimiter rule fails for **"text"**
+    // when " is Unicode punctuation and the preceding char is not
+    // punctuation/whitespace.  The parser leaves literal ** in text.
+    // We fix this by scanning text nodes for unrendered **...** pairs
+    // and wrapping them in <strong> elements.
+    function fixLiteralBold(el) {
+        if (!el || shouldSkipElement(el)) return;
+        const BOLD_RE = /\*\*(.+?)\*\*/g;
+
+        for (const child of Array.from(el.childNodes)) {
+            if (child.nodeType === Node.ELEMENT_NODE) {
+                const tag = child.tagName.toLowerCase();
+                // Don't recurse into code, pre, strong, em, or math
+                if (['code', 'pre', 'strong', 'em'].includes(tag)) continue;
+                if (child.classList?.contains('math-rendered-inline') ||
+                    child.classList?.contains('math-rendered-display')) continue;
+                fixLiteralBold(child);
+                continue;
+            }
+            if (child.nodeType !== Node.TEXT_NODE) continue;
+            const text = child.textContent || '';
+            if (!text.includes('**')) continue;
+
+            // Build replacement fragment
+            const frag = document.createDocumentFragment();
+            let lastIdx = 0;
+            let match;
+            BOLD_RE.lastIndex = 0;
+            while ((match = BOLD_RE.exec(text)) !== null) {
+                // Add text before match
+                if (match.index > lastIdx) {
+                    frag.appendChild(document.createTextNode(text.slice(lastIdx, match.index)));
+                }
+                // Create <strong> element
+                const strong = document.createElement('strong');
+                strong.textContent = match[1];
+                frag.appendChild(strong);
+                lastIdx = BOLD_RE.lastIndex;
+            }
+            if (lastIdx === 0) continue;  // no matches
+            // Add remaining text
+            if (lastIdx < text.length) {
+                frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+            }
+            child.replaceWith(frag);
+        }
+    }
+
     // ── Underscore Restoration ─────────────────────────────────────
     // Markdown renders _x_ as <em>x</em> inside $...$, breaking LaTeX.
     // extractWithMarkers: recursively extract text from a node,
@@ -545,6 +594,7 @@
     }
 
     function renderElement(el) {
+        fixLiteralBold(el);       // Fix CommonMark bold edge cases first
         restoreUnderscores(el);
         unwrapMathMentions(el);  // Fix consumed [] BEFORE rendering
 
