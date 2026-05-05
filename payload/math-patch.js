@@ -378,8 +378,11 @@
                 if (beforeOpen.endsWith('{')) isAsterisk = true;
                 // 3. Preceded by another * (double/triple star: p^{**})
                 if (beforeOpen.endsWith('*')) isAsterisk = true;
-                // 4. Preceded by ) ] } — often means  (expr)* or \right)* etc.
-                if (/[)\]}]$/.test(beforeOpen)) isAsterisk = true;
+                // 4. Preceded by ) or ] — often means  (expr)* or \right)* etc.
+                //    Note: } is excluded because it's ambiguous: could be
+                //    {expr}* (asterisk) or \cmd{arg}_{sub} (subscript).
+                //    The {expr}* cases are covered by rules 1-3.
+                if (/[)\]]$/.test(beforeOpen)) isAsterisk = true;
                 // 5. Preceded by a LaTeX command (\ell, \pi, etc.) — \cmd* is valid
                 //    but \cmd_ would typically be \cmd_{...}, not \cmd_<char>.
                 //    If the content after the marker starts with something OTHER
@@ -396,9 +399,11 @@
                 // 8. After the closing marker, we see { immediately,
                 //    and the char before was NOT _ or ^.  This catches \ell*{i,v}
                 //    where Markdown consumed * into emphasis: \ell <em>{i,v}</em>
-                //    But be careful: _{ is a valid subscript, so only trigger if
-                //    the preceding char is NOT a subscript/superscript operator.
-                if (afterClose.startsWith('{') && !beforeOpen.endsWith('_')) isAsterisk = true;
+                //    But be careful: _{ is a valid subscript (e.g. B_{rc}), so
+                //    only trigger when the preceding char is NOT a valid subscript
+                //    target (letter, digit, closing brace/paren/bracket, or _/^).
+                if (afterClose.startsWith('{') &&
+                    !/[a-zA-Z0-9_^)\]}]$/.test(beforeOpen)) isAsterisk = true;
 
                 const marker = isAsterisk ? (u.marker === '__' ? '**' : '*') : u.marker;
 
