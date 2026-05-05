@@ -448,11 +448,11 @@
                 // 8. After the closing marker, we see { immediately,
                 //    and the char before was NOT _ or ^.  This catches \ell*{i,v}
                 //    where Markdown consumed * into emphasis: \ell <em>{i,v}</em>
-                //    But be careful: _{ is a valid subscript (e.g. B_{rc}), so
+                //    But be careful: _{ is a valid subscript (e.g. B_{rc}, |x|_{t}),
                 //    only trigger when the preceding char is NOT a valid subscript
-                //    target (letter, digit, closing brace/paren/bracket, or _/^).
+                //    target (letter, digit, closing delimiters, |, or _/^).
                 if (afterClose.startsWith('{') &&
-                    !/[a-zA-Z0-9_^)\]}]$/.test(beforeOpen)) isAsterisk = true;
+                    !/[a-zA-Z0-9_^)\]}|]$/.test(beforeOpen)) isAsterisk = true;
 
                 const marker = isAsterisk ? (u.marker === '__' ? '**' : '*') : u.marker;
 
