@@ -357,14 +357,48 @@
                 );
                 if (!touchesMath) return;
 
-                // Heuristic: if the marker is preceded by ^ or ^{, it's highly likely
-                // an asterisk (*) rather than an underscore (_), since ^_ is invalid.
-                // This fixes the bug where $f^*$ and $V^*$ are restored as $f_$ and $V_$.
+                // Heuristic: determine whether the original Markdown delimiter
+                // was * (asterisk) or _ (underscore).  Both produce <em>/<strong>
+                // in the DOM, so we must infer from LaTeX context.
+                //
+                // Key principle: in LaTeX math, _ is the subscript operator and
+                // always appears as  <token>_{...} or <token>_<char>.
+                // Asterisk * appears in many other positions:
+                //   f^*  p^*  \ell^*  {*}  X^{**}  etc.
+                //
+                // Strategy: check both sides of the emphasis boundary.
                 let isAsterisk = false;
                 const beforeOpen = merged.substring(0, u.start);
-                // If preceded by ^ or {, it's highly likely an asterisk
-                if (beforeOpen.endsWith('^') || beforeOpen.endsWith('{')) isAsterisk = true;
+                const afterClose = merged.substring(u.end);
+
+                // ── Preceding-character checks ──
+                // 1. Preceded by ^ (superscript): ^* is common, ^_ is invalid
+                if (beforeOpen.endsWith('^')) isAsterisk = true;
+                // 2. Preceded by { (inside braces): {*} is common (e.g. \xrightarrow{*})
+                if (beforeOpen.endsWith('{')) isAsterisk = true;
+                // 3. Preceded by another * (double/triple star: p^{**})
+                if (beforeOpen.endsWith('*')) isAsterisk = true;
+                // 4. Preceded by ) ] } — often means  (expr)* or \right)* etc.
+                if (/[)\]}]$/.test(beforeOpen)) isAsterisk = true;
+                // 5. Preceded by a LaTeX command (\ell, \pi, etc.) — \cmd* is valid
+                //    but \cmd_ would typically be \cmd_{...}, not \cmd_<char>.
+                //    If the content after the marker starts with something OTHER
+                //    than a single alphanumeric or {, subscript is unlikely.
+                if (/\\[a-zA-Z]+$/.test(beforeOpen)) isAsterisk = true;
+
+                // ── Following-character checks ──
+                // 6. Content inside the emphasis ends with ^ or { (closing side)
                 if (u.text.endsWith('^') || u.text.endsWith('{')) isAsterisk = true;
+                // 7. After the closing marker, we see _ or ^ immediately,
+                //    meaning the pattern was like p^*_{...} (star then subscript).
+                //    _ can't follow _ in LaTeX, so the first must be *.
+                if (/^[_^]/.test(afterClose)) isAsterisk = true;
+                // 8. After the closing marker, we see { immediately,
+                //    and the char before was NOT _ or ^.  This catches \ell*{i,v}
+                //    where Markdown consumed * into emphasis: \ell <em>{i,v}</em>
+                //    But be careful: _{ is a valid subscript, so only trigger if
+                //    the preceding char is NOT a subscript/superscript operator.
+                if (afterClose.startsWith('{') && !beforeOpen.endsWith('_')) isAsterisk = true;
 
                 const marker = isAsterisk ? (u.marker === '__' ? '**' : '*') : u.marker;
 
