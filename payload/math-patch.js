@@ -496,6 +496,75 @@
         if (restored) el.normalize();
     }
 
+    // ── Broken Table Math Repair ─────────────────────────────────
+    // Markdown table parsers treat | as column separator even inside
+    // $...$, splitting math expressions like $|\Omega|^2$ across cells.
+    // We detect rows with too many cells and merge them back by
+    // tracking $-parity to find correct column boundaries.
+    function repairBrokenTableMath(el) {
+        const tables = el.querySelectorAll('table');
+        if (!tables.length) return;
+
+        for (const table of tables) {
+            // Determine expected column count from header
+            const headerRow = table.querySelector('thead tr');
+            if (!headerRow) continue;
+            const expectedCols = headerRow.querySelectorAll('th').length;
+            if (expectedCols === 0) continue;
+
+            const bodyRows = table.querySelectorAll('tbody tr');
+            for (const row of bodyRows) {
+                const cells = [...row.querySelectorAll('td')];
+                if (cells.length <= expectedCols) continue;
+
+                // Too many cells — some | in math was split.
+                // Greedily assign cells to columns: close a column when
+                // the cumulative $ count is even (balanced) AND enough
+                // remaining cells exist for the remaining columns.
+                const groups = [];
+                let current = [];
+                let dollarCount = 0;
+
+                for (let i = 0; i < cells.length; i++) {
+                    current.push(cells[i]);
+                    const text = cells[i].textContent || '';
+                    dollarCount += (text.match(/\$/g) || []).length;
+
+                    const remainingCols = expectedCols - groups.length - 1;
+                    const remainingCells = cells.length - i - 1;
+
+                    if (dollarCount % 2 === 0 && remainingCells >= remainingCols) {
+                        groups.push(current);
+                        current = [];
+                        dollarCount = 0;
+                    }
+                }
+                // Leftover cells go into last group
+                if (current.length > 0) {
+                    if (groups.length > 0) {
+                        groups[groups.length - 1].push(...current);
+                    } else {
+                        groups.push(current);
+                    }
+                }
+                if (groups.length !== expectedCols) continue; // can't fix
+
+                // Merge each group into its first cell, inserting | between
+                for (const group of groups) {
+                    if (group.length <= 1) continue;
+                    const target = group[0];
+                    for (let k = 1; k < group.length; k++) {
+                        target.appendChild(document.createTextNode('|'));
+                        while (group[k].firstChild) {
+                            target.appendChild(group[k].firstChild);
+                        }
+                        group[k].remove();
+                    }
+                }
+            }
+        }
+    }
+
     // ── Skip Logic ─────────────────────────────────────────────────
 
     function shouldSkipText(node) {
@@ -594,6 +663,7 @@
     }
 
     function renderElement(el) {
+        repairBrokenTableMath(el); // Fix | split in table math cells
         fixLiteralBold(el);       // Fix CommonMark bold edge cases first
         restoreUnderscores(el);
         unwrapMathMentions(el);  // Fix consumed [] BEFORE rendering
