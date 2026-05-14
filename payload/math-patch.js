@@ -643,6 +643,9 @@
     function renderElement(el) {
         repairBrokenTableMath(el); // Fix | split in table math cells
         restoreUnderscores(el);
+        fixLiteralBold(el);       // Must run AFTER restoreUnderscores:
+                                  // _ emphasis splits text nodes, hiding **
+                                  // patterns until <em> is unwrapped.
         unwrapMathMentions(el);  // Fix consumed [] BEFORE rendering
 
         // ── Per-text-node pass ─────────────────────────────────────
