@@ -66,6 +66,10 @@
                     let skip = false;
                     // Next char must not be whitespace
                     if (text[idx + 1] && /\s/.test(text[idx + 1])) skip = true;
+                    // Next char must not be a closing delimiter — math
+                    // can never start with ), ], or }.  This prevents stray
+                    // $) from invalid "$ ... $" (spaces) being re-parsed.
+                    if (!skip && text[idx + 1] && /[)\]}]/.test(text[idx + 1])) skip = true;
                     // Skip currency: $ followed by a money-like amount (≥3 digits or comma-separated)
                     if (!skip) {
                         const after = text.slice(idx + 1, idx + 21);
@@ -410,49 +414,23 @@
                 // was * (asterisk) or _ (underscore).  Both produce <em>/<strong>
                 // in the DOM, so we must infer from LaTeX context.
                 //
-                // Key principle: in LaTeX math, _ is the subscript operator and
-                // always appears as  <token>_{...} or <token>_<char>.
-                // Asterisk * appears in many other positions:
-                //   f^*  p^*  \ell^*  {*}  X^{**}  etc.
+                // Key principle: in LaTeX math, _ is the subscript operator
+                // (the overwhelmingly common case), while * appears only in
+                // a few specific positions.  We default to _ and switch to *
+                // only for three safe, unambiguous patterns:
                 //
-                // Strategy: check both sides of the emphasis boundary.
+                //   1. Preceded by ^ : x^* (superscript star)
+                //   2. Preceded by { : {*} (e.g. \xrightarrow{*})
+                //   3. Preceded by * : p^{**} (double star)
+                //
+                // This replaces the previous 8-rule heuristic that kept
+                // producing false positives on patterns like \mathfrak{B}_{rc},
+                // |\dot{\pi}|_{t/T}, etc.
                 let isAsterisk = false;
                 const beforeOpen = merged.substring(0, u.start);
-                const afterClose = merged.substring(u.end);
-
-                // ── Preceding-character checks ──
-                // 1. Preceded by ^ (superscript): ^* is common, ^_ is invalid
                 if (beforeOpen.endsWith('^')) isAsterisk = true;
-                // 2. Preceded by { (inside braces): {*} is common (e.g. \xrightarrow{*})
                 if (beforeOpen.endsWith('{')) isAsterisk = true;
-                // 3. Preceded by another * (double/triple star: p^{**})
                 if (beforeOpen.endsWith('*')) isAsterisk = true;
-                // 4. Preceded by ) or ] — often means  (expr)* or \right)* etc.
-                //    Note: } is excluded because it's ambiguous: could be
-                //    {expr}* (asterisk) or \cmd{arg}_{sub} (subscript).
-                //    The {expr}* cases are covered by rules 1-3.
-                if (/[)\]]$/.test(beforeOpen)) isAsterisk = true;
-                // 5. Preceded by a LaTeX command (\ell, \pi, etc.) — \cmd* is valid
-                //    but \cmd_ would typically be \cmd_{...}, not \cmd_<char>.
-                //    If the content after the marker starts with something OTHER
-                //    than a single alphanumeric or {, subscript is unlikely.
-                if (/\\[a-zA-Z]+$/.test(beforeOpen)) isAsterisk = true;
-
-                // ── Following-character checks ──
-                // 6. Content inside the emphasis ends with ^ or { (closing side)
-                if (u.text.endsWith('^') || u.text.endsWith('{')) isAsterisk = true;
-                // 7. After the closing marker, we see _ or ^ immediately,
-                //    meaning the pattern was like p^*_{...} (star then subscript).
-                //    _ can't follow _ in LaTeX, so the first must be *.
-                if (/^[_^]/.test(afterClose)) isAsterisk = true;
-                // 8. After the closing marker, we see { immediately,
-                //    and the char before was NOT _ or ^.  This catches \ell*{i,v}
-                //    where Markdown consumed * into emphasis: \ell <em>{i,v}</em>
-                //    But be careful: _{ is a valid subscript (e.g. B_{rc}, |x|_{t}),
-                //    only trigger when the preceding char is NOT a valid subscript
-                //    target (letter, digit, closing delimiters, |, or _/^).
-                if (afterClose.startsWith('{') &&
-                    !/[a-zA-Z0-9_^)\]}|]$/.test(beforeOpen)) isAsterisk = true;
 
                 const marker = isAsterisk ? (u.marker === '__' ? '**' : '*') : u.marker;
 
@@ -664,7 +642,6 @@
 
     function renderElement(el) {
         repairBrokenTableMath(el); // Fix | split in table math cells
-        fixLiteralBold(el);       // Fix CommonMark bold edge cases first
         restoreUnderscores(el);
         unwrapMathMentions(el);  // Fix consumed [] BEFORE rendering
 
@@ -691,6 +668,11 @@
 
         const text = node.textContent || '';
         if (node.hasAttribute(RENDERED_ATTR) && node[SNAPSHOT_PROP] === text) return;
+
+        // fixLiteralBold runs on ALL elements (not just math-containing)
+        // to handle CommonMark's Unicode punctuation edge case with **"..."**
+        fixLiteralBold(node);
+
         if (!MATH_HINT.test(text)) return;
 
         if (!window.katex?.render) {
