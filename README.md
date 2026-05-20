@@ -1,11 +1,35 @@
 # ag-math-render
 
+> [!IMPORTANT]
+> **📦 Archived — May 2026**
+>
+> Antigravity 2.0 shipped native LaTeX math rendering, making this project unnecessary.
+> The code remains here as a reference for anyone interested in Electron app patching,
+> KaTeX integration under Trusted Types CSP, or Markdown↔LaTeX conflict resolution.
+>
+> It was a good run. Zero stars, one happy user. 🫡
+
+---
+
 Render LaTeX math formulas in [Antigravity AI IDE](https://antigravity.google/) chat — with just **2 files** and zero bloat.
 
 <p align="center">
   <strong>Before</strong>: <code>$x^2 + y^2 = z^2$</code> shown as plain text<br/>
   <strong>After</strong>: Beautifully rendered math formulas ✨
 </p>
+
+## What This Project Solved
+
+Antigravity 1.x had no math rendering. Worse, its Markdown parser actively **destroyed** LaTeX syntax:
+
+| Problem | Example | How We Fixed It |
+|---------|---------|-----------------|
+| `_` parsed as emphasis | `$x_{ij}$` → `$x<em>ij</em>$` | `restoreUnderscores`: unwrap `<em>` inside math regions |
+| `*` paired across `$` boundaries | `$f^*$ text $V^*$` → cross-boundary `<em>` | 3-rule heuristic (^, {, *) to distinguish `*` from `_` |
+| `|` splits table cells | `$|\Omega|^2$` in table → 3 cells | `repairBrokenTableMath`: $-parity greedy merge |
+| `**"text"**` not bold | Unicode punctuation breaks CommonMark flanking | `fixLiteralBold`: regex scan + `<strong>` wrap |
+| `$)` false positive | `($ \tau < t $)` → stray `$)` opens math | `findOpen` rejects `$` followed by `)`, `]`, `}` |
+| `{}` set vs grouping | `$\{x\}$` → `${x}$` | `recoverBraces`: context-aware classifier with 30+ LaTeX commands |
 
 ## Features
 
@@ -16,66 +40,24 @@ Render LaTeX math formulas in [Antigravity AI IDE](https://antigravity.google/) 
 - **Offline**: KaTeX bundled locally, no CDN needed
 - **Tiny**: ~1.5MB total (mostly KaTeX fonts)
 
-## How It Works
+## How It Worked
 
 1. `install.sh` copies KaTeX + our script into the Antigravity app bundle
 2. Static `<script>` tags are injected into `workbench.html` (bypassing Trusted Types CSP)
 3. A `MutationObserver` watches the entire DOM for new text containing `$...$` or `$$...$$`
 4. Matched text is rendered in-place with [KaTeX](https://katex.org/)
 
-No Antigravity-internal CSS classes are referenced, so class name changes in updates won't break it.
-
-## Install
-
-```bash
-git clone https://github.com/chihao-zhang/ag-math-render.git
-cd ag-math-render
-bash install.sh
-```
-
-Then **restart Antigravity** (Cmd+Q → reopen).
-
-### Custom Install Path
-
-```bash
-bash install.sh /path/to/Antigravity.app
-```
-
-### After Antigravity Updates
-
-Antigravity updates replace the patched files. Simply re-run:
-
-```bash
-bash install.sh
-```
-
-## Uninstall
-
-```bash
-bash uninstall.sh
-```
-
-Then restart Antigravity.
-
-## Supported Syntax
-
-| Syntax | Type | Status |
-|--------|------|--------|
-| `$...$` | Inline | ✅ Works |
-| `$$...$$` | Display (block) | ✅ Works |
-| `\(...\)` | Inline | ⚠️ Unreliable* |
-| `\[...\]` | Display | ⚠️ Unreliable* |
-
-\* *Antigravity's Markdown renderer treats `\(` and `\[` as escape sequences and strips the backslash before our script sees the DOM. This is a fundamental limitation of any DOM-based approach. Use `$` / `$$` instead.*
+> **Note**: Antigravity 2.0 replaced the VS Code-based architecture with a web SPA served
+> from a local HTTPS server. The `workbench.html` injection target no longer exists.
 
 ## Project Structure
 
 ```
 ag-math-render/
-├── install.sh          # One-command installer
+├── install.sh          # One-command installer (v1.x only)
 ├── uninstall.sh        # One-command uninstaller
 ├── payload/
-│   ├── math-patch.js   # Core rendering logic (~240 lines)
+│   ├── math-patch.js   # Core rendering logic (~780 lines)
 │   └── katex/          # KaTeX v0.16.21 (local bundle)
 │       ├── katex.min.js
 │       ├── katex.min.css
@@ -102,16 +84,15 @@ Antigravity uses an AMD module loader (`define`/`require`). KaTeX's UMD wrapper 
 
 Projects like [anti-power](https://github.com/daoif/anti-power) target specific CSS classes like `.antigravity-agent-side-panel`. These break every time Antigravity updates its UI. We observe the entire `document.body` subtree, making us immune to class name changes.
 
-## Comparison with anti-power
+### The Emphasis Restoration Problem
 
-| | anti-power | ag-math-render |
-|---|---|---|
-| Features | 6 (math + mermaid + copy + font + width + table) | 1 (math) |
-| Install tool | Tauri desktop app (Rust + frontend) | Shell script |
-| Code size | ~3500 lines | ~240 lines |
-| DOM targeting | 3 hardcoded CSS classes | Zero class dependencies |
-| KaTeX loading | Dynamic (Trusted Types workaround) | Static (no workaround needed) |
-| Update resilience | Low (3 fragility points) | High (1 fragility point) |
+The hardest problem was distinguishing Markdown emphasis from LaTeX operators. When Markdown sees `$f^*$ text **bold $V^*$**`, it pairs the `*` characters as emphasis across `$` boundaries, destroying the math. Our final solution (after 10+ iterations) was a 3-rule heuristic:
+
+```
+isAsterisk = beforeChar ∈ {'^', '{', '*'}
+```
+
+This covers `x^*` (superscript star), `\xrightarrow{*}` (brace star), and `p^{**}` (double star) — the only positions where `*` unambiguously appears in LaTeX math.
 
 ## Acknowledgments
 
@@ -119,18 +100,20 @@ This project was inspired by [anti-power](https://github.com/daoif/anti-power), 
 
 - **Trusted Types are the real barrier** — not CSP `script-src`. Anti-power discovered that `require-trusted-types-for 'script'` blocks dynamic script injection, and built an elaborate policy-hijacking mechanism to work around it. We found a simpler path: static `<script>` tags bypass Trusted Types entirely.
 - **AMD loader conflicts with KaTeX** — anti-power's `suspendAmd()` pattern taught us that `window.define.amd` must be hidden during KaTeX load. We adopted the same idea but applied it at install time (wrapping the JS file) rather than at runtime.
-- **`katex.render()` is Trusted Types-safe** — anti-power's `math.js` showed that KaTeX's `render()` method uses DOM APIs directly, so it works under Trusted Types without any workaround. This eliminated an entire category of complexity.
+- **`katex.render()` is Trusted Types-safe** — anti-power's `math.js` showed that KaTeX's `render()` method uses DOM APIs directly, so it works under Trusted Types without any workaround.
 - **`product.json` checksum clearing** — anti-power identified the exact checksum keys that must be removed to prevent Antigravity from reporting file corruption.
-
-Where we diverge from anti-power is in philosophy: they built a feature-rich enhancement suite (math, Mermaid, copy buttons, font controls, table styling) with a Tauri desktop app as the installer. We do one thing — math — and use a shell script. Their CSS selector-based DOM targeting (`antigravity-agent-side-panel`) breaks on UI updates; our `document.body` observer is class-name-agnostic.
 
 Thank you to the anti-power contributors for mapping the terrain. 🙏
 
-## Requirements
+## Timeline
 
-- macOS (Linux/Windows: adjust paths in `install.sh`)
-- Antigravity AI IDE
-- Python 3 (for checksum removal — pre-installed on macOS)
+- **2026-04-13** — Project created. First working prototype: KaTeX injection via static `<script>` tags.
+- **2026-04-24** — Fixed `$f^*$` rendering as `f^_` (asterisk vs underscore disambiguation).
+- **2026-04-25** — Fixed `$\xrightarrow{*}$` (extended heuristic to `{` context).
+- **2026-05-05** — Fixed cross-boundary emphasis, table `|` splitting, CommonMark bold edge cases. Major brace recovery engine added.
+- **2026-05-13** — First-principles redesign: 8-rule heuristic → 3-rule heuristic.
+- **2026-05-14** — Fixed `findOpen` false positive for `$)` patterns.
+- **2026-05-20** — Antigravity 2.0 ships native math rendering. Project archived. 🫡
 
 ## License
 
@@ -139,6 +122,7 @@ MIT
 ---
 
 <p align="center">
-  <em>Built by Forge 🔨 from Bamboo Grove 🎋
-  Powered by Antigravity + Claude Opus 4.6</em>
+  <em>Built by Forge 🔨 from Bamboo Grove 🎋<br/>
+  Powered by Antigravity + Claude Opus 4.6<br/><br/>
+  Zero stars. One user. No regrets.</em>
 </p>
