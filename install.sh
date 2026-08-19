@@ -21,7 +21,16 @@ NC='\033[0m'
 
 # ── Locate Antigravity ──────────────────────────────────────────
 
-APP_PATH="${1:-/Applications/Antigravity.app}"
+# Auto-detect Antigravity app bundle
+if [ -n "${1:-}" ]; then
+    APP_PATH="$1"
+elif [ -d "/Applications/Antigravity IDE.app" ]; then
+    APP_PATH="/Applications/Antigravity IDE.app"
+elif [ -d "/Applications/Antigravity.app" ]; then
+    APP_PATH="/Applications/Antigravity.app"
+else
+    APP_PATH="/Applications/Antigravity IDE.app"
+fi
 RESOURCES="$APP_PATH/Contents/Resources/app"
 WORKBENCH_DIR="$RESOURCES/out/vs/code/electron-browser/workbench"
 PRODUCT_JSON="$RESOURCES/product.json"
