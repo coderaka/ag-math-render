@@ -1,26 +1,15 @@
 # ag-math-render
 
-> [!IMPORTANT]
-> **📦 Archived — May 2026**
->
-> Antigravity 2.0 shipped native LaTeX math rendering, making this project unnecessary.
-> The code remains here as a reference for anyone interested in Electron app patching,
-> KaTeX integration under Trusted Types CSP, or Markdown↔LaTeX conflict resolution.
->
-> It was a good run. Zero stars, one happy user. 🫡
-
----
-
-Render LaTeX math formulas in [Antigravity AI IDE](https://antigravity.google/) chat — with just **2 files** and zero bloat.
+Render LaTeX math formulas in [Antigravity IDE](https://antigravity.google/) chat — with just **2 files** and zero bloat.
 
 <p align="center">
   <strong>Before</strong>: <code>$x^2 + y^2 = z^2$</code> shown as plain text<br/>
   <strong>After</strong>: Beautifully rendered math formulas ✨
 </p>
 
-## What This Project Solved
+## Why This Exists
 
-Antigravity 1.x had no math rendering. Worse, its Markdown parser actively **destroyed** LaTeX syntax:
+Antigravity IDE (the VS Code fork) has no built-in math rendering in its chat panels. Worse, its Markdown parser actively **destroys** LaTeX syntax:
 
 | Problem | Example | How We Fixed It |
 |---------|---------|-----------------|
@@ -40,21 +29,48 @@ Antigravity 1.x had no math rendering. Worse, its Markdown parser actively **des
 - **Offline**: KaTeX bundled locally, no CDN needed
 - **Tiny**: ~1.5MB total (mostly KaTeX fonts)
 
-## How It Worked
+## Installation
+
+```bash
+# Clone
+git clone https://github.com/chihao-zhang/ag-math-render.git
+cd ag-math-render
+
+# Install (auto-detects Antigravity IDE.app or Antigravity.app)
+bash install.sh
+
+# Restart Antigravity IDE: Cmd+Shift+P → "Developer: Reload Window"
+```
+
+After an Antigravity IDE update, re-run `bash install.sh` — updates replace the app bundle.
+
+To uninstall:
+
+```bash
+bash uninstall.sh
+```
+
+## Compatibility
+
+| App | Bundle ID | Status |
+|-----|-----------|--------|
+| **Antigravity IDE** (VS Code fork) | `com.google.antigravity-ide` | ✅ Tested on 2.5.5 |
+| **Antigravity** (standalone client) | `com.google.antigravity` | ⚠️ 2.0+ has native math rendering; patch may be redundant |
+
+> **Note on Antigravity 2.0 vs Antigravity IDE**: These are separate products. Antigravity 2.0 (standalone client) shipped native LaTeX rendering in May 2026. Antigravity IDE (the VS Code fork) did **not** inherit this feature and still needs this patch.
+
+## How It Works
 
 1. `install.sh` copies KaTeX + our script into the Antigravity app bundle
 2. Static `<script>` tags are injected into `workbench.html` (bypassing Trusted Types CSP)
 3. A `MutationObserver` watches the entire DOM for new text containing `$...$` or `$$...$$`
 4. Matched text is rendered in-place with [KaTeX](https://katex.org/)
 
-> **Note**: Antigravity 2.0 replaced the VS Code-based architecture with a web SPA served
-> from a local HTTPS server. The `workbench.html` injection target no longer exists.
-
 ## Project Structure
 
 ```
 ag-math-render/
-├── install.sh          # One-command installer (v1.x only)
+├── install.sh          # One-command installer
 ├── uninstall.sh        # One-command uninstaller
 ├── payload/
 │   ├── math-patch.js   # Core rendering logic (~780 lines)
@@ -113,7 +129,8 @@ Thank you to the anti-power contributors for mapping the terrain. 🙏
 - **2026-05-05** — Fixed cross-boundary emphasis, table `|` splitting, CommonMark bold edge cases. Major brace recovery engine added.
 - **2026-05-13** — First-principles redesign: 8-rule heuristic → 3-rule heuristic.
 - **2026-05-14** — Fixed `findOpen` false positive for `$)` patterns.
-- **2026-05-20** — Antigravity 2.0 ships native math rendering. Project archived. 🫡
+- **2026-05-20** — Antigravity 2.0 (standalone client) ships native math rendering. Project archived.
+- **2026-08-19** — Project revived for Antigravity IDE (VS Code fork), which lacks native math rendering. Auto-detection of `Antigravity IDE.app` vs `Antigravity.app` added.
 
 ## License
 
@@ -123,6 +140,5 @@ MIT
 
 <p align="center">
   <em>Built by Forge 🔨 from Bamboo Grove 🎋<br/>
-  Powered by Antigravity + Claude Opus 4.6<br/><br/>
   Zero stars. One user. No regrets.</em>
 </p>
