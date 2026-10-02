@@ -295,7 +295,41 @@
         // ! after letter/digit (n!) is factorial — don't touch.
         result = result.replace(/!(?=\\[a-zA-Z]|\()/g, '\\!');
 
+        // Step 7: Recover \_ inside text-mode arguments.
+        // Markdown treats \_ as an escape and strips the backslash, leaving a
+        // bare _ in e.g. \text{temporal_out}. KaTeX rejects a bare _ in text
+        // mode ("Expected 'EOF', got '_'"), so the whole formula turns red.
+        // A bare _ is never valid inside \text{...}, so restoring \_ is safe.
+        result = restoreTextUnderscores(result);
+
         return result;
+    }
+
+    // Re-escape bare underscores inside \text{...}-style arguments only.
+    // (In math mode a bare _ is a legitimate subscript, so leave it alone.)
+    function restoreTextUnderscores(latex) {
+        const re = /\\(?:text|textbf|textit|textrm|textsf|texttt|textnormal|mbox|hbox)\s*\{/g;
+        let out = '';
+        let last = 0;
+        let m;
+        while ((m = re.exec(latex)) !== null) {
+            const bodyStart = re.lastIndex;
+            let depth = 1;
+            let j = bodyStart;
+            while (j < latex.length && depth > 0) {
+                const c = latex[j];
+                if (c === '\\') { j += 2; continue; }
+                if (c === '{') depth++;
+                else if (c === '}') depth--;
+                j++;
+            }
+            const bodyEnd = depth === 0 ? j - 1 : latex.length;
+            const body = latex.slice(bodyStart, bodyEnd).replace(/(?<!\\)_/g, '\\_');
+            out += latex.slice(last, bodyStart) + body;
+            last = bodyEnd;
+            re.lastIndex = bodyEnd;
+        }
+        return out + latex.slice(last);
     }
 
     // ── Literal Bold Fixup ───────────────────────────────────────
