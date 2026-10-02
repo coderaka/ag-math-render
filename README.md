@@ -31,9 +31,11 @@ Antigravity IDE (the VS Code fork) has no built-in math rendering in its chat pa
 
 ## Installation
 
+### Linux (Ubuntu 24.04)
+
 ```bash
 # Clone
-git clone https://github.com/chihao-zhang/ag-math-render.git
+git clone https://github.com/PNxZEN/ag-math-render.git
 cd ag-math-render
 
 # Install (auto-detects Antigravity IDE.app or Antigravity.app)
@@ -49,6 +51,33 @@ To uninstall:
 ```bash
 bash uninstall.sh
 ```
+
+
+### Windows
+
+First clone and navigate to the repo:
+
+```bash
+# Clone
+git clone https://github.com/PNxZEN/ag-math-render.git
+cd ag-math-render
+```
+
+Close Antigravity, then in PowerShell from the repo root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+If Antigravity isn't auto-detected, pass its install folder (the one containing `Antigravity.exe`):
+
+```powershell
+.\install.ps1 -AppPath "C:\Users\<you>\AppData\Local\Programs\Antigravity"
+```
+
+To uninstall: `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1`
+
+If Antigravity is installed under `Program Files`, run PowerShell as Administrator.
 
 ## Compatibility
 
